@@ -8,9 +8,9 @@
     <string name="crime_title_hint">Crime title</string>
     <string name="date_label">Date</string>
     <string name="change_date">Change Date</string>
-    <string name="suspect_hint">Suspect (from contacts later)</string>
-    <string name="attach_photo">Attach Photo</string>
-    <string name="change_photo">Change Photo</string>
+    <string name="suspect_hint">Suspect</string>
+    <string name="choose_suspect">Choose suspect</string>
+    <string name="add_photo_hint">Tap to add photo</string>
     <string name="share_report">Share Report</string>
     <string name="save">Save</string>
     <string name="call_police">Call the police</string>

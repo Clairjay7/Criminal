@@ -1,9 +1,16 @@
 package com.example.criminalgalorpot;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.ContactsContract;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.widget.Button;
@@ -17,15 +24,22 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import com.example.criminalgalorpot.model.Crime;
 import com.example.criminalgalorpot.model.CrimeRepository;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class CrimeDetailActivity extends AppCompatActivity {
 
     private static final String EXTRA_CRIME_INDEX = "com.example.criminalgalorpot.crime_index";
     private static final String SAVE_CRIME_INDEX = "crime_index";
+    private static final int REQUEST_PHOTO = 0;
+    private static final int REQUEST_CONTACT = 1;
 
     private Crime crime;
     private int crimeIndex = -1;
@@ -33,10 +47,10 @@ public class CrimeDetailActivity extends AppCompatActivity {
     private TextView dateButton;
     private Switch solvedSwitch;
     private EditText suspectField;
-    private Button photoButton;
     private Button shareButton;
     private ImageView photoView;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault());
+    private volatile CountDownLatch photoCopyLatch;
 
     /** Open detail for a crime by its position in the list. Use this for list clicks and for new crime (pass size-1). */
     public static Intent newIntent(Context context, int crimeIndex) {
@@ -57,7 +71,7 @@ public class CrimeDetailActivity extends AppCompatActivity {
             index = getIntent().getIntExtra(EXTRA_CRIME_INDEX, -1);
         }
         java.util.List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
-        if (index < 0 || index >= crimes.size()) {
+        if (crimes == null || index < 0 || index >= crimes.size()) {
             finish();
             return;
         }
@@ -74,7 +88,7 @@ public class CrimeDetailActivity extends AppCompatActivity {
 
             titleField = findViewById(R.id.crime_title);
             if (titleField != null) {
-                titleField.setText(crime.getTitle());
+                titleField.setText(crime.getTitle() != null ? crime.getTitle() : "");
                 titleField.addTextChangedListener(new TextWatcher() {
                     @Override
                     public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -90,9 +104,11 @@ public class CrimeDetailActivity extends AppCompatActivity {
             }
 
             dateButton = findViewById(R.id.crime_date);
-            if (dateButton != null) dateButton.setText(dateFormat.format(crime.getDate()));
+            if (dateButton != null) dateButton.setText(crime.getDate() != null ? dateFormat.format(crime.getDate()) : "");
             Button changeDateButton = findViewById(R.id.change_date_button);
-            if (changeDateButton != null) changeDateButton.setOnClickListener(v -> showDatePicker());
+            if (changeDateButton != null) changeDateButton.setOnClickListener(v -> {
+                try { showDatePicker(); } catch (Exception ignored) { }
+            });
 
             solvedSwitch = findViewById(R.id.crime_solved);
             if (solvedSwitch != null) {
@@ -117,22 +133,39 @@ public class CrimeDetailActivity extends AppCompatActivity {
                 });
             }
 
+            Button chooseSuspectButton = findViewById(R.id.choose_suspect_button);
+            if (chooseSuspectButton != null) {
+                chooseSuspectButton.setOnClickListener(v -> {
+                    try { pickContact(); } catch (Exception ignored) { }
+                });
+            }
+
             photoView = findViewById(R.id.crime_photo);
-            photoButton = findViewById(R.id.crime_photo_button);
-            updatePhotoButtonAndImage();
-            if (photoButton != null) {
-                photoButton.setOnClickListener(v -> {
-                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-                    intent.setType("image/*");
-                    startActivityForResult(Intent.createChooser(intent, "Select photo"), 0);
+            updatePhotoImage();
+            if (photoView != null) {
+                photoView.setOnClickListener(v -> {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                        intent.setType("image/*");
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivityForResult(intent, REQUEST_PHOTO);
+                    } catch (Exception ignored) { }
                 });
             }
 
             shareButton = findViewById(R.id.crime_share);
-            if (shareButton != null) shareButton.setOnClickListener(v -> shareReport());
+            if (shareButton != null) shareButton.setOnClickListener(v -> {
+                try { shareReport(); } catch (Exception ignored) { }
+            });
 
             Button saveButton = findViewById(R.id.save_button);
-            if (saveButton != null) saveButton.setOnClickListener(v -> finish());
+            if (saveButton != null) saveButton.setOnClickListener(v -> {
+                try {
+                    saveAndReturnToList();
+                } catch (Throwable ignored) {
+                }
+            });
         } catch (Exception e) {
             finish();
         }
@@ -147,35 +180,182 @@ public class CrimeDetailActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) {
-            finish();
+            try { saveAndReturnToList(); } catch (Throwable ignored) { }
             return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
+    private void saveAndReturnToList() {
+        try {
+            CrimeRepository.getInstance().save(getApplicationContext());
+        } catch (Throwable ignored) {
+        }
+        finish();
+    }
+
+    @Override
+    public void onBackPressed() {
+        saveAndReturnToList();
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+        try {
+            if (resultCode != RESULT_OK || data == null) return;
             Uri uri = data.getData();
-            crime.setPhotoPath(uri.toString());
-            updatePhotoButtonAndImage();
+            if (uri == null) return;
+            if (requestCode == REQUEST_PHOTO) {
+                if (crime == null) return;
+                final Uri photoUri = uri;
+                final android.content.Context appContext = getApplicationContext();
+                final Crime currentCrime = crime;
+                photoCopyLatch = new CountDownLatch(1);
+                new Thread(() -> {
+                    try {
+                        final String savedPath = copyPhotoToAppStorage(appContext, currentCrime, photoUri);
+                        runOnUiThread(() -> {
+                            try {
+                                if (crime != null && savedPath != null) {
+                                    crime.setPhotoPath(savedPath);
+                                    try {
+                                        CrimeRepository.getInstance().save(appContext);
+                                    } catch (Exception ignored) { }
+                                }
+                                updatePhotoImage();
+                            } catch (Exception ignored) { }
+                            finally {
+                                if (photoCopyLatch != null) {
+                                    photoCopyLatch.countDown();
+                                    photoCopyLatch = null;
+                                }
+                            }
+                        });
+                    } catch (Throwable t) {
+                        if (photoCopyLatch != null) {
+                            photoCopyLatch.countDown();
+                            photoCopyLatch = null;
+                        }
+                    }
+                }).start();
+            } else if (requestCode == REQUEST_CONTACT) {
+                String name = getContactName(uri);
+                if (name != null && crime != null) {
+                    crime.setSuspect(name);
+                    if (suspectField != null) suspectField.setText(name);
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 
-    private void updatePhotoButtonAndImage() {
-        if (crime == null || photoButton == null || photoView == null) return;
-        if (crime.getPhotoPath() != null) {
-            photoButton.setText(R.string.change_photo);
-            photoView.setVisibility(View.VISIBLE);
-            photoView.setImageURI(Uri.parse(crime.getPhotoPath()));
+    private void pickContact() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_CONTACTS}, REQUEST_CONTACT);
+            return;
+        }
+        launchContactPicker();
+    }
+
+    private void launchContactPicker() {
+        Intent intent = new Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI);
+        startActivityForResult(intent, REQUEST_CONTACT);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CONTACT && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            launchContactPicker();
+        }
+    }
+
+    private String getContactName(Uri contactUri) {
+        String[] projection = new String[]{ContactsContract.Contacts.DISPLAY_NAME};
+        try (Cursor cursor = getContentResolver().query(contactUri, projection, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                return cursor.getString(0);
+            }
+        }
+        return null;
+    }
+
+    private String copyPhotoToAppStorage(Context context, Crime c, Uri sourceUri) {
+        if (c == null || sourceUri == null || context == null) return null;
+        try {
+            File dir = context.getFilesDir();
+            if (dir == null) return null;
+            File photosDir = new File(dir, "crime_photos");
+            if (!photosDir.exists() && !photosDir.mkdirs()) return null;
+            File destFile = new File(photosDir, c.getId().toString() + ".jpg");
+            InputStream in = null;
+            try {
+                in = context.getContentResolver().openInputStream(sourceUri);
+                if (in == null) return null;
+                try (FileOutputStream out = new FileOutputStream(destFile)) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    long total = 0;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                        total += len;
+                        if (total > 20 * 1024 * 1024) break;
+                    }
+                }
+                return destFile.exists() ? destFile.getAbsolutePath() : null;
+            } finally {
+                if (in != null) try { in.close(); } catch (Exception ignored) { }
+            }
+        } catch (Throwable e) {
+            try {
+                File dir = context.getFilesDir();
+                if (dir != null) {
+                    File f = new File(new File(dir, "crime_photos"), c.getId().toString() + ".jpg");
+                    if (f.exists()) f.delete();
+                }
+            } catch (Throwable ignored) { }
+            return null;
+        }
+    }
+
+    private void updatePhotoImage() {
+        if (crime == null || photoView == null) return;
+        String path = crime.getPhotoPath();
+        if (path != null && !path.isEmpty()) {
+            File f = new File(path);
+            if (f.exists()) {
+                photoView.setImageURI(Uri.fromFile(f));
+            } else if (path.startsWith("content://")) {
+                photoView.setImageURI(Uri.parse(path));
+            } else {
+                photoView.setImageResource(android.R.drawable.ic_menu_gallery);
+            }
         } else {
-            photoButton.setText(R.string.attach_photo);
-            photoView.setVisibility(View.GONE);
+            photoView.setImageResource(android.R.drawable.ic_menu_gallery);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        try {
+            if (photoCopyLatch != null) {
+                try {
+                    photoCopyLatch.await(4, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                photoCopyLatch = null;
+            }
+            CrimeRepository.getInstance().save(getApplicationContext());
+        } catch (Exception ignored) {
         }
     }
 
     private void showDatePicker() {
+        if (crime == null || crime.getDate() == null) return;
         Calendar cal = Calendar.getInstance();
         cal.setTime(crime.getDate());
         new android.app.DatePickerDialog(this,
@@ -194,11 +374,13 @@ public class CrimeDetailActivity extends AppCompatActivity {
     }
 
     private void shareReport() {
-        String title = crime.getTitle().isEmpty() ? "(No title)" : crime.getTitle();
+        if (crime == null) return;
+        String title = crime.getTitle() != null && !crime.getTitle().isEmpty() ? crime.getTitle() : "(No title)";
         String solvedString = crime.isSolved() ? "Solved" : "Unsolved";
         String suspectString = crime.getSuspect() != null ? crime.getSuspect() : "No suspect";
+        String dateStr = crime.getDate() != null ? dateFormat.format(crime.getDate()) : "";
         String report = "Crime: " + title + "\n"
-                + "Date: " + dateFormat.format(crime.getDate()) + "\n"
+                + "Date: " + dateStr + "\n"
                 + "Status: " + solvedString + "\n"
                 + "Suspect: " + suspectString;
 

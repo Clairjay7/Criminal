@@ -10,6 +10,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.criminalgalorpot.model.Crime;
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,25 +72,53 @@ public class CrimeAdapter extends RecyclerView.Adapter<CrimeAdapter.CrimeHolder>
         }
 
         void bind(Crime crime, OnCrimeClickListener listener) {
-            String title = crime.getTitle().trim().isEmpty() ? "(No title)" : crime.getTitle();
-            titleTextView.setText(title);
-            dateTextView.setText(dateFormat.format(crime.getDate()));
-            solvedIconView.setVisibility(crime.isSolved() ? View.VISIBLE : View.GONE);
+            try {
+                String title = crime != null && crime.getTitle() != null ? crime.getTitle().trim() : "";
+                if (title.isEmpty()) title = "(No title)";
+                if (titleTextView != null) titleTextView.setText(title);
+                if (dateTextView != null) dateTextView.setText(crime != null && crime.getDate() != null ? dateFormat.format(crime.getDate()) : "");
+                if (solvedIconView != null) {
+                    solvedIconView.setVisibility(crime != null && crime.isSolved() ? View.VISIBLE : View.GONE);
+                    solvedIconView.setClickable(false);
+                    solvedIconView.setFocusable(false);
+                }
 
-            if (crime.getPhotoPath() != null) {
-                photoImageView.setVisibility(View.VISIBLE);
-                photoImageView.setImageURI(android.net.Uri.parse(crime.getPhotoPath()));
-            } else {
-                photoImageView.setVisibility(View.GONE);
+                if (photoImageView != null) {
+                    if (crime != null && crime.getPhotoPath() != null && !crime.getPhotoPath().isEmpty()) {
+                        File f = new File(crime.getPhotoPath());
+                        if (f.exists()) {
+                            photoImageView.setVisibility(View.VISIBLE);
+                            photoImageView.setImageURI(android.net.Uri.fromFile(f));
+                        } else {
+                            photoImageView.setVisibility(View.GONE);
+                        }
+                    } else {
+                        photoImageView.setVisibility(View.GONE);
+                    }
+                    photoImageView.setClickable(false);
+                    photoImageView.setFocusable(false);
+                }
+
+                if (callPoliceButton != null) {
+                    callPoliceButton.setOnClickListener(v -> {
+                        try {
+                            Toast.makeText(v.getContext(), R.string.calling_police, Toast.LENGTH_SHORT).show();
+                        } catch (Exception ignored) {
+                        }
+                    });
+                }
+
+                if (itemView != null) {
+                    itemView.setOnClickListener(v -> {
+                        try {
+                            int pos = getAdapterPosition();
+                            if (pos != RecyclerView.NO_POSITION && listener != null) listener.onCrimeClick(pos);
+                        } catch (Exception ignored) {
+                        }
+                    });
+                }
+            } catch (Exception ignored) {
             }
-
-            callPoliceButton.setOnClickListener(v ->
-                Toast.makeText(v.getContext(), R.string.calling_police, Toast.LENGTH_SHORT).show());
-
-            itemView.setOnClickListener(v -> {
-                int pos = getAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION) listener.onCrimeClick(pos);
-            });
         }
     }
 }

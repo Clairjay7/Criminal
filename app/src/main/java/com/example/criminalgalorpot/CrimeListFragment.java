@@ -27,32 +27,59 @@ public class CrimeListFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_crime_list, container, false);
+        View view = null;
+        try {
+            view = inflater.inflate(R.layout.fragment_crime_list, container, false);
+            if (view == null) {
+                view = container != null ? new View(container.getContext()) : new android.widget.FrameLayout(inflater.getContext());
+                return view;
+            }
 
-        recyclerView = view.findViewById(R.id.crime_recycler_view);
-        recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
+            android.content.Context ctx = getContext();
+            if (ctx == null) ctx = getActivity();
+            if (ctx == null) return view;
 
-        List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
-        adapter = new CrimeAdapter(crimes, position -> {
-            if (getContext() == null) return;
-            Intent intent = CrimeDetailActivity.newIntent(getContext(), position);
-            startActivity(intent);
+            recyclerView = view.findViewById(R.id.crime_recycler_view);
+            if (recyclerView != null) {
+                recyclerView.setLayoutManager(new LinearLayoutManager(ctx));
+            }
+
+            List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
+            if (crimes == null) crimes = new java.util.ArrayList<>();
+            adapter = new CrimeAdapter(crimes, position -> {
+            try {
+                android.app.Activity activity = getActivity();
+                if (activity == null) return;
+                java.util.List<Crime> list = CrimeRepository.getInstance().getCrimes();
+                if (list == null || position < 0 || position >= list.size()) return;
+                Intent intent = CrimeDetailActivity.newIntent(activity, position);
+                activity.startActivity(intent);
+            } catch (Throwable ignored) {
+            }
         });
-        recyclerView.setAdapter(adapter);
+            if (recyclerView != null) recyclerView.setAdapter(adapter);
 
-        FloatingActionButton fab = view.findViewById(R.id.fab_add_crime);
-        if (fab != null) {
-            fab.setOnClickListener(v -> {
-                if (getContext() == null) return;
-                Crime newCrime = new Crime("New Crime");
-                CrimeRepository.getInstance().addCrime(newCrime);
-                int newIndex = CrimeRepository.getInstance().getCrimes().size() - 1;
-                Intent intent = CrimeDetailActivity.newIntent(getContext(), newIndex);
-                startActivity(intent);
-            });
+            FloatingActionButton fab = view.findViewById(R.id.fab_add_crime);
+            if (fab != null) {
+                fab.setOnClickListener(v -> {
+                    try {
+                        android.app.Activity activity = getActivity();
+                        if (activity == null) return;
+                        Crime newCrime = new Crime("New Crime");
+                        CrimeRepository.getInstance().addCrime(newCrime);
+                        try { CrimeRepository.getInstance().save(activity); } catch (Throwable ignored) { }
+                        java.util.List<Crime> list = CrimeRepository.getInstance().getCrimes();
+                        if (list == null || list.isEmpty()) return;
+                        Intent intent = CrimeDetailActivity.newIntent(activity, list.size() - 1);
+                        activity.startActivity(intent);
+                    } catch (Throwable ignored) { }
+                });
+            }
+        } catch (Throwable t) {
+            if (view == null && container != null)
+                view = inflater.inflate(android.R.layout.simple_list_item_1, container, false);
         }
-
-        return view;
+        return view != null ? view : (container != null ? new View(container.getContext()) : new View(inflater.getContext()));
     }
 
     @Override
@@ -72,22 +99,28 @@ public class CrimeListFragment extends Fragment {
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-        if (recyclerView != null && recyclerView.getLayoutManager() instanceof LinearLayoutManager) {
-            LinearLayoutManager lm = (LinearLayoutManager) recyclerView.getLayoutManager();
-            int position = lm.findFirstVisibleItemPosition();
-            View first = recyclerView.getChildAt(0);
-            int offset = (first != null) ? first.getTop() : 0;
-            outState.putInt(SAVE_SCROLL_POSITION, Math.max(0, position));
-            outState.putInt(SAVE_SCROLL_OFFSET, offset);
+        try {
+            if (recyclerView != null && recyclerView.getLayoutManager() instanceof LinearLayoutManager) {
+                LinearLayoutManager lm = (LinearLayoutManager) recyclerView.getLayoutManager();
+                int position = lm.findFirstVisibleItemPosition();
+                View first = recyclerView.getChildCount() > 0 ? recyclerView.getChildAt(0) : null;
+                int offset = (first != null) ? first.getTop() : 0;
+                outState.putInt(SAVE_SCROLL_POSITION, Math.max(0, position));
+                outState.putInt(SAVE_SCROLL_OFFSET, offset);
+            }
+        } catch (Exception ignored) {
         }
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if (adapter != null) {
-            adapter.setCrimes(CrimeRepository.getInstance().getCrimes());
-            adapter.notifyDataSetChanged();
+        try {
+            if (adapter != null) {
+                adapter.setCrimes(CrimeRepository.getInstance().getCrimes());
+                adapter.notifyDataSetChanged();
+            }
+        } catch (Exception ignored) {
         }
     }
 }
