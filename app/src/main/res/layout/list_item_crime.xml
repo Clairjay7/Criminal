@@ -28,14 +28,14 @@
             android:contentDescription="@string/crime_photo"
             android:scaleType="centerCrop" />
 
-        <TextView
-            android:id="@+id/crime_solved_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+        <ImageView
+            android:id="@+id/crime_solved_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:layout_marginStart="8dp"
-            android:text="@string/solved"
-            android:textSize="12sp"
-            android:visibility="gone" />
+            android:visibility="gone"
+            android:contentDescription="@string/solved"
+            android:src="@drawable/ic_handcuff" />
     </LinearLayout>
 
     <TextView
@@ -44,4 +44,11 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:textSize="12sp" />
+
+    <Button
+        android:id="@+id/call_police_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/call_police" />
 </LinearLayout>

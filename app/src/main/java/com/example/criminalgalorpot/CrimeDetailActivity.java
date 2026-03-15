@@ -11,23 +11,24 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Switch;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import com.example.criminalgalorpot.model.Crime;
 import com.example.criminalgalorpot.model.CrimeRepository;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
-import java.util.UUID;
 
 public class CrimeDetailActivity extends AppCompatActivity {
 
-    private static final String EXTRA_CRIME_ID = "com.example.criminalgalorpot.crime_id";
+    private static final String EXTRA_CRIME_INDEX = "com.example.criminalgalorpot.crime_index";
+    private static final String SAVE_CRIME_INDEX = "crime_index";
 
     private Crime crime;
+    private int crimeIndex = -1;
     private EditText titleField;
     private TextView dateButton;
     private Switch solvedSwitch;
@@ -37,86 +38,119 @@ public class CrimeDetailActivity extends AppCompatActivity {
     private ImageView photoView;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault());
 
-    public static Intent newIntent(Context context, UUID crimeId) {
+    /** Open detail for a crime by its position in the list. Use this for list clicks and for new crime (pass size-1). */
+    public static Intent newIntent(Context context, int crimeIndex) {
         Intent intent = new Intent(context, CrimeDetailActivity.class);
-        intent.putExtra(EXTRA_CRIME_ID, crimeId.toString());
+        intent.putExtra(EXTRA_CRIME_INDEX, crimeIndex);
         return intent;
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_crime_detail);
 
-        String crimeIdString = getIntent().getStringExtra(EXTRA_CRIME_ID);
-        UUID crimeId = UUID.fromString(crimeIdString);
-        crime = CrimeRepository.getInstance().getCrime(crimeId);
-        if (crime == null) {
+        int index = -1;
+        if (savedInstanceState != null) {
+            index = savedInstanceState.getInt(SAVE_CRIME_INDEX, -1);
+        }
+        if (index < 0 && getIntent() != null) {
+            index = getIntent().getIntExtra(EXTRA_CRIME_INDEX, -1);
+        }
+        java.util.List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
+        if (index < 0 || index >= crimes.size()) {
             finish();
             return;
         }
+        crime = crimes.get(index);
+        crimeIndex = index;
 
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setTitle("Crime Details");
+        try {
+            setContentView(R.layout.activity_crime_detail);
+
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+                getSupportActionBar().setTitle("Crime Details");
+            }
+
+            titleField = findViewById(R.id.crime_title);
+            if (titleField != null) {
+                titleField.setText(crime.getTitle());
+                titleField.addTextChangedListener(new TextWatcher() {
+                    @Override
+                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                    @Override
+                    public void onTextChanged(CharSequence s, int start, int before, int count) {
+                        crime.setTitle(s.toString());
+                    }
+
+                    @Override
+                    public void afterTextChanged(Editable s) {}
+                });
+            }
+
+            dateButton = findViewById(R.id.crime_date);
+            if (dateButton != null) dateButton.setText(dateFormat.format(crime.getDate()));
+            Button changeDateButton = findViewById(R.id.change_date_button);
+            if (changeDateButton != null) changeDateButton.setOnClickListener(v -> showDatePicker());
+
+            solvedSwitch = findViewById(R.id.crime_solved);
+            if (solvedSwitch != null) {
+                solvedSwitch.setChecked(crime.isSolved());
+                solvedSwitch.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> crime.setSolved(isChecked));
+            }
+
+            suspectField = findViewById(R.id.crime_suspect);
+            if (suspectField != null) {
+                suspectField.setText(crime.getSuspect() != null ? crime.getSuspect() : "");
+                suspectField.addTextChangedListener(new TextWatcher() {
+                    @Override
+                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                    @Override
+                    public void onTextChanged(CharSequence s, int start, int before, int count) {
+                        crime.setSuspect(s.toString().trim().isEmpty() ? null : s.toString());
+                    }
+
+                    @Override
+                    public void afterTextChanged(Editable s) {}
+                });
+            }
+
+            photoView = findViewById(R.id.crime_photo);
+            photoButton = findViewById(R.id.crime_photo_button);
+            updatePhotoButtonAndImage();
+            if (photoButton != null) {
+                photoButton.setOnClickListener(v -> {
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.setType("image/*");
+                    startActivityForResult(Intent.createChooser(intent, "Select photo"), 0);
+                });
+            }
+
+            shareButton = findViewById(R.id.crime_share);
+            if (shareButton != null) shareButton.setOnClickListener(v -> shareReport());
+
+            Button saveButton = findViewById(R.id.save_button);
+            if (saveButton != null) saveButton.setOnClickListener(v -> finish());
+        } catch (Exception e) {
+            finish();
         }
-        toolbar.setNavigationOnClickListener(v -> finish());
+    }
 
-        titleField = findViewById(R.id.crime_title);
-        titleField.setText(crime.getTitle());
-        titleField.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (crimeIndex >= 0) outState.putInt(SAVE_CRIME_INDEX, crimeIndex);
+    }
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                crime.setTitle(s.toString());
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {}
-        });
-
-        dateButton = findViewById(R.id.crime_date);
-        dateButton.setText(dateFormat.format(crime.getDate()));
-        Button changeDateButton = findViewById(R.id.change_date_button);
-        changeDateButton.setOnClickListener(v -> showDatePicker());
-
-        solvedSwitch = findViewById(R.id.crime_solved);
-        solvedSwitch.setChecked(crime.isSolved());
-        solvedSwitch.setOnCheckedChangeListener((CompoundButton buttonView, boolean isChecked) -> crime.setSolved(isChecked));
-
-        suspectField = findViewById(R.id.crime_suspect);
-        suspectField.setText(crime.getSuspect() != null ? crime.getSuspect() : "");
-        suspectField.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                crime.setSuspect(s.toString().trim().isEmpty() ? null : s.toString());
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {}
-        });
-
-        photoView = findViewById(R.id.crime_photo);
-        photoButton = findViewById(R.id.crime_photo_button);
-        updatePhotoButtonAndImage();
-        photoButton.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.setType("image/*");
-            startActivityForResult(Intent.createChooser(intent, "Select photo"), 0);
-        });
-
-        shareButton = findViewById(R.id.crime_share);
-        shareButton.setOnClickListener(v -> shareReport());
-
-        Button saveButton = findViewById(R.id.save_button);
-        saveButton.setOnClickListener(v -> finish());
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            finish();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
@@ -130,6 +164,7 @@ public class CrimeDetailActivity extends AppCompatActivity {
     }
 
     private void updatePhotoButtonAndImage() {
+        if (crime == null || photoButton == null || photoView == null) return;
         if (crime.getPhotoPath() != null) {
             photoButton.setText(R.string.change_photo);
             photoView.setVisibility(View.VISIBLE);
