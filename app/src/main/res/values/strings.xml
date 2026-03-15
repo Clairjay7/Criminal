@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">CriminalGalorpot</string>
+    <string name="app_title">CriminalIntent</string>
+    <string name="add_crime">Add crime</string>
+    <string name="crime_photo">Crime photo</string>
+    <string name="solved">Solved</string>
+    <string name="crime_title_hint">Crime title</string>
+    <string name="date_label">Date</string>
+    <string name="change_date">Change Date</string>
+    <string name="suspect_hint">Suspect (from contacts later)</string>
+    <string name="attach_photo">Attach Photo</string>
+    <string name="change_photo">Change Photo</string>
+    <string name="share_report">Share Report</string>
+    <string name="save">Save</string>
 </resources>
