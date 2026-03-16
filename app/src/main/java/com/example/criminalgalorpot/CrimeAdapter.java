@@ -93,7 +93,6 @@ public class CrimeAdapter extends RecyclerView.Adapter<CrimeAdapter.CrimeHolder>
                         itemView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
                     }
                 }
-
                 if (photoImageView != null) {
                     if (crime != null && crime.getPhotoPath() != null && !crime.getPhotoPath().isEmpty()) {
                         File f = new File(crime.getPhotoPath());

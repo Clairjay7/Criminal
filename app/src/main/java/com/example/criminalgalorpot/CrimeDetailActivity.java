@@ -301,6 +301,49 @@ public class CrimeDetailActivity extends AppCompatActivity {
         saveAndReturnToList();
     }
 
+<<<<<<< HEAD
+    private void goToNextCrime() {
+        java.util.List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
+        if (crimes == null) return;
+        if (crimeIndex < crimes.size() - 1) {
+            crimeIndex++;
+            bindCrime();
+        }
+    }
+
+    private void goToPreviousCrime() {
+        if (crimeIndex > 0) {
+            crimeIndex--;
+            bindCrime();
+        }
+    }
+
+    private void goToFirstCrime() {
+        java.util.List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
+        if (crimes == null || crimes.isEmpty()) return;
+        crimeIndex = 0;
+        bindCrime();
+    }
+
+    private void goToLastCrime() {
+        java.util.List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
+        if (crimes == null || crimes.isEmpty()) return;
+        crimeIndex = crimes.size() - 1;
+        bindCrime();
+    }
+
+    private void updateCaseStatusText() {
+        TextView statusView = findViewById(R.id.case_status_text);
+        if (statusView == null || crime == null) return;
+        if (crime.isSolved()) {
+            statusView.setText("CLOSE CASE");
+        } else {
+            statusView.setText("OPEN CASE");
+        }
+    }
+
+=======
+>>>>>>> origin/main
     private void goToNextCrime() {
         java.util.List<Crime> crimes = CrimeRepository.getInstance().getCrimes();
         if (crimes == null) return;
